@@ -1,6 +1,6 @@
 /**
  * Dependency:
- *   npm install @vis.gl/react-google-maps
+ *   npm install @vis.gl/react-google-maps @googlemaps/markerclusterer
  *
  * Environment variables:
  *   VITE_GOOGLE_MAPS_API_KEY=...
@@ -10,12 +10,14 @@
  * Replace MOCK_TRELLO_CARDS with the output from the project's existing Trello fetch function.
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import {
   APIProvider,
   AdvancedMarker,
   Map as GoogleMap,
   Pin,
+  useMap,
 } from "@vis.gl/react-google-maps";
 
 type LatLng = { lat: number; lng: number };
@@ -49,6 +51,126 @@ type TrailIssue = {
 };
 
 const TRAIL_CENTER: LatLng = { lat: 39.0007, lng: -76.9228 };
+
+type IssueMarker = google.maps.marker.AdvancedMarkerElement;
+type RegisterMarker = (id: string, marker: IssueMarker | null) => void;
+
+function ClusteredIssuePin({
+  issue,
+  selected,
+  registerMarker,
+  onSelect,
+}: {
+  issue: TrailIssue;
+  selected: boolean;
+  registerMarker: RegisterMarker;
+  onSelect: (issue: TrailIssue) => void;
+}) {
+  const markerRef = useCallback(
+    (marker: IssueMarker | null) => {
+      registerMarker(issue.id, marker);
+    },
+    [issue.id, registerMarker],
+  );
+
+  return (
+    <AdvancedMarker
+      ref={markerRef}
+      position={issue.position}
+      title={issue.title}
+      onClick={() => onSelect(issue)}
+    >
+      <Pin
+        background={selected ? "#ea4335" : issue.afterPhotoUrl ? "#2f855a" : "#9333ea"}
+        borderColor={selected ? "#c5221f" : "#1a202c"}
+        glyphColor={selected ? "#b31412" : "#ffffff"}
+      />
+    </AdvancedMarker>
+  );
+}
+
+function ClusteredIssueMarkers({
+  issues,
+  selectedIssueId,
+  onSelect,
+}: {
+  issues: TrailIssue[];
+  selectedIssueId: string | null;
+  onSelect: (issue: TrailIssue) => void;
+}) {
+  const map = useMap();
+  const clustererRef = useRef<MarkerClusterer | null>(null);
+  const [markers, setMarkers] = useState<Record<string, IssueMarker>>({});
+
+  const registerMarker = useCallback<RegisterMarker>((id, marker) => {
+    setMarkers((previous) => {
+      if (previous[id] === marker || (!marker && !previous[id]))
+        return previous;
+      const next = { ...previous };
+      if (marker) next[id] = marker;
+      else delete next[id];
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!map) return;
+    const clusterer = new MarkerClusterer({
+      map,
+      renderer: {
+        render({ count, position }) {
+          const circle = document.createElement("div");
+
+          circle.textContent = String(count);
+          Object.assign(circle.style, {
+            width: "44px",
+            height: "44px",
+            borderRadius: "50%",
+            background: "#2f855a",
+            color: "white",
+            border: "3px solid white",
+            boxShadow: "0 2px 6px #0005",
+            display: "grid",
+            placeItems: "center",
+            fontSize: "16px",
+            fontWeight: "700",
+          });
+
+          return new google.maps.marker.AdvancedMarkerElement({
+            position,
+            content: circle,
+            title: `${count} trail issues`,
+            zIndex: 1000 + count,
+          });
+        },
+      },
+    });
+
+    clustererRef.current = clusterer;
+    return () => {
+      clusterer.clearMarkers();
+      clusterer.setMap(null);
+      clustererRef.current = null;
+    };
+  }, [map]);
+
+  useEffect(() => {
+    const clusterer = clustererRef.current;
+    if (!clusterer) return;
+    clusterer.clearMarkers(true);
+    clusterer.addMarkers(Object.values(markers));
+  }, [map, markers]);
+
+  return issues.map((issue) => (
+    <ClusteredIssuePin
+      key={issue.id}
+      issue={issue}
+      selected={issue.id === selectedIssueId}
+      registerMarker={registerMarker}
+      onSelect={onSelect}
+    />
+  ));
+}
 
 const MOCK_TRELLO_CARDS: TrelloTrailCard[] = [
   {
@@ -145,9 +267,10 @@ export default function TrailMapGoogleMaps() {
     () =>
       Array.from(
         new globalThis.Map<string, string>(
-          issues.map(
-            (issue): [string, string] => [issue.eventId, issue.eventName],
-          ),
+          issues.map((issue): [string, string] => [
+            issue.eventId,
+            issue.eventName,
+          ]),
         ).entries(),
       ),
     [issues],
@@ -193,8 +316,7 @@ export default function TrailMapGoogleMaps() {
     VITE_GOOGLE_MAP_ID?: string;
   };
 
-  const env =
-    (import.meta as ImportMeta & { env?: GoogleMapsEnv }).env ?? {};
+  const env = (import.meta as ImportMeta & { env?: GoogleMapsEnv }).env ?? {};
 
   const apiKey = env.VITE_GOOGLE_MAPS_API_KEY ?? "";
   const mapId = env.VITE_GOOGLE_MAP_ID ?? "DEMO_MAP_ID";
@@ -262,22 +384,11 @@ export default function TrailMapGoogleMaps() {
               gestureHandling="greedy"
               style={{ width: "100%", height: "100%" }}
             >
-              {visibleIssues.map((issue) => (
-                <AdvancedMarker
-                  key={issue.id}
-                  position={issue.position}
-                  title={issue.title}
-                  onClick={() => setSelectedIssue(issue)}
-                >
-                  <Pin
-                    background={
-                      issue.afterPhotoUrl ? "#2f855a" : "#c05621"
-                    }
-                    borderColor="#1a202c"
-                    glyphColor="#ffffff"
-                  />
-                </AdvancedMarker>
-              ))}
+              <ClusteredIssueMarkers
+                issues={visibleIssues}
+                selectedIssueId={selectedIssue?.id ?? null}
+                onSelect={setSelectedIssue}
+              />
 
               {currentLocation && (
                 <AdvancedMarker
