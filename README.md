@@ -17,6 +17,7 @@ npm install react react-dom
 npm install maplibre-gl
 npm install leaflet react-leaflet
 npm install @vis.gl/react-google-maps
+npm install @googlemaps/markerclusterer
 
 npm install -D vite typescript @types/react @types/react-dom @types/leaflet
 ```
