@@ -21,16 +21,18 @@ npm install @googlemaps/markerclusterer
 
 npm install -D vite typescript @types/react @types/react-dom @types/leaflet @types/leaflet.markercluster
 ```
-## View 
+
+## View
+
 ```bash
 npx vite
 ```
-Note that something like 
-```http://localhost:1234/``` will appear. 
 
-To view each proposal, you must append the respective html, such as: 
-- ```http://localhost:1234/MLindex.html```
-- ```http://localhost:1234/GMindex.html```
-- ```http://localhost:1234/LFindex.html```
+Note that something like
+`http://localhost:1234/` will appear.
 
-The Leaflet prototype groups nearby issues into numbered clusters. Click a cluster to zoom in; overlapping issues spread apart at maximum zoom. Event filtering updates cluster counts, and your current location stays separate.
+To view each proposal, you must append the respective html, such as:
+
+- `http://localhost:1234/MLindex.html`
+- `http://localhost:1234/GMindex.html`
+- `http://localhost:1234/LFindex.html`
