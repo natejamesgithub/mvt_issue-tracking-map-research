@@ -1,7 +1,7 @@
 /**
  * Dependencies:
- *   npm install leaflet react-leaflet
- *   npm install -D @types/leaflet
+ *   npm install leaflet react-leaflet react-leaflet-cluster
+ *   npm install -D @types/leaflet @types/leaflet.markercluster
  *
  * This example uses OpenStreetMap's public raster tile endpoint for a lightweight demo.
  * Use a production-ready tile provider or self-hosted tiles before shipping at scale.
@@ -19,6 +19,9 @@ import {
   useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import MarkerClusterGroup from "react-leaflet-cluster";
+import "react-leaflet-cluster/dist/assets/MarkerCluster.css";
+import "react-leaflet-cluster/dist/assets/MarkerCluster.Default.css";
 
 type LatLng = [number, number];
 
@@ -259,28 +262,36 @@ export default function TrailMapLeaflet() {
 
           <FlyToLocation position={currentLocation} />
 
-          {visibleIssues.map((issue) => (
-            <CircleMarker
-              key={issue.id}
-              center={issue.position}
-              radius={9}
-              pathOptions={{
-                color: "#ffffff",
-                weight: 2,
-                fillColor: issue.afterPhotoUrl ? "#2f855a" : "#c05621",
-                fillOpacity: 1,
-              }}
-              eventHandlers={{
-                click: () => setSelectedIssue(issue),
-              }}
-            >
-              <Popup>
-                <strong>{issue.title}</strong>
-                <br />
-                {issue.eventName}
-              </Popup>
-            </CircleMarker>
-          ))}
+          <MarkerClusterGroup
+            chunkedLoading
+            maxClusterRadius={50}
+            showCoverageOnHover={false}
+            zoomToBoundsOnClick
+            spiderfyOnMaxZoom
+          >
+            {visibleIssues.map((issue) => (
+              <CircleMarker
+                key={issue.id}
+                center={issue.position}
+                radius={9}
+                pathOptions={{
+                  color: "#ffffff",
+                  weight: 2,
+                  fillColor: issue.afterPhotoUrl ? "#2f855a" : "#c05621",
+                  fillOpacity: 1,
+                }}
+                eventHandlers={{
+                  click: () => setSelectedIssue(issue),
+                }}
+              >
+                <Popup>
+                  <strong>{issue.title}</strong>
+                  <br />
+                  {issue.eventName}
+                </Popup>
+              </CircleMarker>
+            ))}
+          </MarkerClusterGroup>
 
           {currentLocation && (
             <CircleMarker
