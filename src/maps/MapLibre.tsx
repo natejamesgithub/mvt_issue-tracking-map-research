@@ -53,6 +53,55 @@ type TrailIssue = {
 
 const TRAIL_CENTER: [number, number] = [-76.9228, 39.0007];
 
+// Illustrative routes only. Replace with surveyed/approved trail GeoJSON.
+const SAMPLE_TRAILS = {
+  type: "FeatureCollection" as const,
+  features: [
+    {
+      type: "Feature" as const,
+      properties: { name: "Sample main trail" },
+      geometry: {
+        type: "LineString" as const,
+        coordinates: [
+          [-76.9248, 38.9983],
+          [-76.9242, 38.9989],
+          [-76.924, 38.9991],
+          [-76.9237, 39.0001],
+          [-76.9234, 39.0012],
+          [-76.9229, 39.002],
+        ],
+      },
+    },
+    {
+      type: "Feature" as const,
+      properties: { name: "Sample creek connector" },
+      geometry: {
+        type: "LineString" as const,
+        coordinates: [
+          [-76.9237, 39.0001],
+          [-76.9228, 39.0003],
+          [-76.9219, 38.9998],
+          [-76.921, 38.9996],
+        ],
+      },
+    },
+    {
+      type: "Feature" as const,
+      properties: { name: "Sample east trail", color: "#9333ea" },
+      geometry: {
+        type: "LineString" as const,
+        coordinates: [
+          [-76.92, 39.0005],
+          [-76.9195, 39.001],
+          [-76.9198, 39.0016],
+          [-76.9191, 39.0021],
+          [-76.9185, 39.0025],
+        ],
+      },
+    },
+  ],
+};
+
 const MOCK_TRELLO_CARDS: TrelloTrailCard[] = [
   {
     id: "card-1",
@@ -97,7 +146,7 @@ const MOCK_TRELLO_CARDS: TrelloTrailCard[] = [
     eventName: "Summer Maintenance",
     area: "South Section",
     lat: 38.9991,
-    lng: -76.9240,
+    lng: -76.924,
     beforePhotoUrl: "https://placehold.co/320x180?text=Before+Photo",
   },
 ];
@@ -144,12 +193,15 @@ export default function TrailMapMapLibre() {
   );
 
   const [eventFilter, setEventFilter] = useState("all");
+  const [showTrails, setShowTrails] = useState(true);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
 
   const events = useMemo(
     () =>
       Array.from(
-        new globalThis.Map(issues.map((issue) => [issue.eventId, issue.eventName])).entries(),
+        new globalThis.Map(
+          issues.map((issue) => [issue.eventId, issue.eventName]),
+        ).entries(),
       ),
     [issues],
   );
@@ -183,6 +235,25 @@ export default function TrailMapMapLibre() {
     );
 
     map.on("load", () => {
+      map.addSource("trail-routes", { type: "geojson", data: SAMPLE_TRAILS });
+      map.addLayer({
+        id: "trail-route-outline",
+        type: "line",
+        source: "trail-routes",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#ffffff", "line-width": 8 },
+      });
+      map.addLayer({
+        id: "trail-route-lines",
+        type: "line",
+        source: "trail-routes",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ["coalesce", ["get", "color"], "#d97706"],
+          "line-width": 4,
+        },
+      });
+
       map.addSource("trail-issues", {
         type: "geojson",
         data: toGeoJSON(issues),
@@ -275,6 +346,27 @@ export default function TrailMapMapLibre() {
   }, [issues]);
 
   useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const updateVisibility = () => {
+      for (const layer of ["trail-route-outline", "trail-route-lines"]) {
+        if (map.getLayer(layer)) {
+          map.setLayoutProperty(
+            layer,
+            "visibility",
+            showTrails ? "visible" : "none",
+          );
+        }
+      }
+    };
+    updateVisibility();
+    map.on("load", updateVisibility);
+    return () => {
+      map.off("load", updateVisibility);
+    };
+  }, [showTrails]);
+
+  useEffect(() => {
     const source = mapRef.current?.getSource("trail-issues") as
       | GeoJSONSource
       | undefined;
@@ -308,6 +400,14 @@ export default function TrailMapMapLibre() {
               </option>
             ))}
           </select>
+        </label>
+        <label style={{ marginLeft: 16 }}>
+          <input
+            type="checkbox"
+            checked={showTrails}
+            onChange={(event) => setShowTrails(event.target.checked)}
+          />{" "}
+          Show sample trails
         </label>
       </section>
 
