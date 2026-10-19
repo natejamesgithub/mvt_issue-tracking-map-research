@@ -31,6 +31,7 @@ type TrelloTrailCard = {
   url: string;
   eventId: string;
   eventName: string;
+  eventDate: string;
   area: string;
   lat: number;
   lng: number;
@@ -44,6 +45,7 @@ type TrailIssue = {
   trelloUrl: string;
   eventId: string;
   eventName: string;
+  eventDate: string;
   area: string;
   lat: number;
   lng: number;
@@ -109,6 +111,7 @@ const MOCK_TRELLO_CARDS: TrelloTrailCard[] = [
     url: "https://trello.com/c/example1",
     eventId: "event-fall-cleanup",
     eventName: "Fall Trail Cleanup",
+    eventDate: "2026-10-19",
     area: "North Section",
     lat: 39.0012,
     lng: -76.9234,
@@ -121,6 +124,7 @@ const MOCK_TRELLO_CARDS: TrelloTrailCard[] = [
     url: "https://trello.com/c/example2",
     eventId: "event-fall-cleanup",
     eventName: "Fall Trail Cleanup",
+    eventDate: "2026-10-01",
     area: "Creek Section",
     lat: 38.9998,
     lng: -76.9219,
@@ -132,6 +136,7 @@ const MOCK_TRELLO_CARDS: TrelloTrailCard[] = [
     url: "https://trello.com/c/example3",
     eventId: "event-summer-maintenance",
     eventName: "Summer Maintenance",
+    eventDate: "2026-07-12",
     area: "South Section",
     lat: 38.9989,
     lng: -76.9242,
@@ -144,6 +149,7 @@ const MOCK_TRELLO_CARDS: TrelloTrailCard[] = [
     url: "https://trello.com/c/example4",
     eventId: "event-summer-maintenance",
     eventName: "Summer Maintenance",
+    eventDate: "2026-07-12",
     area: "South Section",
     lat: 38.9991,
     lng: -76.924,
@@ -158,6 +164,7 @@ function trelloCardToTrailIssue(card: TrelloTrailCard): TrailIssue {
     trelloUrl: card.url,
     eventId: card.eventId,
     eventName: card.eventName,
+    eventDate: card.eventDate,
     area: card.area,
     lat: card.lat,
     lng: card.lng,
@@ -180,6 +187,83 @@ function toGeoJSON(issues: TrailIssue[]) {
         coordinates: [issue.lng, issue.lat],
       },
     })),
+  };
+}
+
+function toNeglectJSON(trails: typeof SAMPLE_TRAILS, issues: TrailIssue[]) {
+
+  function daysBetween(date: string) {
+
+    const then = new Date(date).getTime()
+    const now = Date.now();
+
+    return (
+      (now - then) / (1000 * 60 * 60 * 24)
+    );
+
+  }
+
+  function neglectScore(age: number, distance: number) {
+    
+    const DECAY_DISTANCE = 0.01;
+    const influence = Math.exp(-distance / DECAY_DISTANCE);
+
+    const maintenanceCredit = influence * Math.max(0, 730 - age);
+
+    return Math.max(0, 730 - maintenanceCredit);
+
+  }
+
+  const segments: any[] = [];
+
+  for (const trail of trails.features) {
+
+    const coordinates = trail.geometry.coordinates;
+
+    for (let i = 0; i < coordinates.length - 1; i++) {
+
+      const start = coordinates[i];
+      const end = coordinates[i + 1];
+
+      const midLng = (start[0] + end[0]) / 2;
+      const midLat = (start[1] + end[1]) / 2;
+
+      let closestIssue: TrailIssue | null = null;
+      let minDistance = Infinity;
+
+      for (const issue of issues) {
+
+        const dx = midLng - issue.lng;
+        const dy = midLat - issue.lat;
+
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestIssue = issue;
+        }
+
+      }
+
+      const score = closestIssue ? neglectScore(daysBetween(closestIssue.eventDate), minDistance) : 730;
+
+      segments.push({
+        type: "Feature",
+        properties: {
+          neglectScore: score,
+        },
+        geometry: {
+          type: "LineString",
+          coordinates: [start, end],
+        },
+      });
+
+    }
+  }
+
+  return {
+    type: "FeatureCollection",
+    features: segments,
   };
 }
 
@@ -235,6 +319,46 @@ export default function TrailMapMapLibre() {
     );
 
     map.on("load", () => {
+
+      map.addSource("trail-age", { type: "geojson", data: toNeglectJSON(SAMPLE_TRAILS, issues) });
+      map.addLayer({
+
+        id: "trail-age-overlay",
+        type: "line",
+        source: "trail-age",
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
+        },
+        paint: {
+          "line-width": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+
+            12, 70,
+            14, 90,
+            16, 105,
+            18, 160,
+          ],
+          "line-opacity": 0.35,
+          "line-blur": 60,
+          "line-color": [
+            "interpolate",
+            ["linear"],
+            ["get", "neglectScore"],
+
+            0, "#22c55e",
+            30, "#84cc16",
+            90, "#eab308",
+            180, "#f97316",
+            365, "#dc2626",
+            730, "#991b1b",
+          ],
+        }
+
+      });
+
       map.addSource("trail-routes", { type: "geojson", data: SAMPLE_TRAILS });
       map.addLayer({
         id: "trail-route-outline",
